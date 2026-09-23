@@ -37,7 +37,11 @@ ctx = Dexterous.root()
 
 {:ok, _} = Context.use(ctx, LLM, model: model)
 {:ok, _} = Context.use(ctx, Sessions, dir: Path.join(System.tmp_dir!(), "dcw-headless-sessions"))
-{:ok, _} = Context.use(ctx, Tools, tools: [Tools.Read, Tools.Write, Tools.Edit], env: %{cwd: cwd})
+{:ok, _} =
+  Context.use(ctx, Tools,
+    tools: [Tools.Read, Tools.Write, Tools.Edit, Tools.Glob, Tools.Grep],
+    env: %{cwd: cwd}
+  )
 
 await = fn key ->
   Enum.reduce_while(1..100, nil, fn _, _ ->
