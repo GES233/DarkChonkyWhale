@@ -4,7 +4,9 @@ defmodule DarkChonkyWhale.Tools.Read do
   time.
 
   The display is LF-normalized (CRLF files show without the `\\r`), so what
-  the model sees is exactly the view the `edit` tool matches against.
+  the model sees is exactly the view the `edit` tool matches against. Bytes
+  that are not valid UTF-8 (e.g. GBK-encoded files) show as the replacement
+  character.
   """
 
   @behaviour DarkChonkyWhale.Tool
@@ -41,10 +43,17 @@ defmodule DarkChonkyWhale.Tools.Read do
     limit = max(1, Map.get(args, "limit", 2000))
 
     case File.read(path) do
-      {:ok, text} -> {:ok, page(normalize_eol(text), offset, limit)}
-      {:error, :enoent} -> {:error, "file not found: #{path}"}
-      {:error, :eisdir} -> {:error, "not a file: #{path}"}
-      {:error, reason} -> {:error, "cannot read #{path}: #{:file.format_error(reason)}"}
+      {:ok, text} ->
+        {:ok, text |> String.replace_invalid() |> normalize_eol() |> page(offset, limit)}
+
+      {:error, :enoent} ->
+        {:error, "file not found: #{path}"}
+
+      {:error, :eisdir} ->
+        {:error, "not a file: #{path}"}
+
+      {:error, reason} ->
+        {:error, "cannot read #{path}: #{:file.format_error(reason)}"}
     end
   end
 

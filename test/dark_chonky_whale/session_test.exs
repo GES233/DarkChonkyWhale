@@ -45,6 +45,23 @@ defmodule DarkChonkyWhale.SessionTest do
       assert_received {:session_event, :s1, %{type: :"user/message", seq: 0}}
     end
 
+    test "invalid UTF-8 in a payload is scrubbed, never fatal", %{dir: dir, scope: scope} do
+      pid = open_session(dir, scope, :gbk)
+
+      # GBK-encoded console output, as captured by a tool on a Chinese
+      # Windows machine: not valid UTF-8.
+      {:ok, event} =
+        Session.append(pid, :"tool/result", %{"name" => "bash", "output" => <<199, 253, 10>>})
+
+      assert Process.alive?(pid)
+      assert String.valid?(event.data["output"])
+
+      GenServer.stop(pid)
+      pid = open_session(dir, scope, :gbk)
+      assert [%{data: %{"output" => output}}] = Session.events(pid)
+      assert String.valid?(output)
+    end
+
     test "reopening the same id replays the on-disk log", %{dir: dir, scope: scope} do
       pid = open_session(dir, scope, :s1)
       {:ok, _} = Session.append(pid, :"user/message", %{"content" => "hello"})

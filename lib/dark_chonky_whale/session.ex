@@ -105,7 +105,7 @@ defmodule DarkChonkyWhale.Session do
       seq: length(state.events),
       type: type,
       at: DateTime.utc_now(),
-      data: data
+      data: sanitize(data)
     }
 
     persist!(state.path, event)
@@ -142,6 +142,17 @@ defmodule DarkChonkyWhale.Session do
 
     File.write!(path, line <> "\n", [:append])
   end
+
+  # JSON is UTF-8, but payloads can carry raw bytes (e.g. GBK console output
+  # captured by a tool). Scrub invalid UTF-8 to the replacement char rather
+  # than let Jason raise and take the whole session process down.
+  defp sanitize(term) when is_binary(term), do: String.replace_invalid(term)
+
+  defp sanitize(term) when is_map(term),
+    do: Map.new(term, fn {key, value} -> {sanitize(key), sanitize(value)} end)
+
+  defp sanitize(term) when is_list(term), do: Enum.map(term, &sanitize/1)
+  defp sanitize(term), do: term
 
   defp decode_line(line) do
     decoded = Jason.decode!(line)

@@ -51,6 +51,15 @@ defmodule DarkChonkyWhale.Tools.ReadWriteTest do
       assert result == "3\tline3\n4\tline4\n... (10 lines total, showing 3-4)"
     end
 
+    test "a non-UTF-8 (e.g. GBK) file reads with replacement chars", %{env: env, dir: dir} do
+      File.write!(Path.join(dir, "gbk.txt"), <<186, 72, 10, 76, 97, 10>>)
+
+      assert {:ok, text} = Read.execute(%{"file_path" => "gbk.txt"}, env)
+      assert String.valid?(text)
+      refute text =~ <<186>>
+      assert text =~ "La"
+    end
+
     test "empty file, missing file, and past-the-end offset are plain answers", %{
       env: env,
       dir: dir

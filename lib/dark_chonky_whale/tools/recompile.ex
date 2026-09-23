@@ -69,6 +69,10 @@ defmodule DarkChonkyWhale.Tools.Recompile do
 
   defp render(report) do
     case report do
+      %{compile: :ok, changed: []} ->
+        "compiled, but no *loaded* module changed — new or not-yet-called " <>
+          "modules activate lazily on first use; already-running fibers are unaffected"
+
       %{changed: []} ->
         "recompiled: no changes"
 

@@ -48,7 +48,15 @@ ctx = Dexterous.root()
       id: :tools,
       component: Tools,
       config: [
-        tools: [Tools.Read, Tools.Write, Tools.Edit, Tools.Glob, Tools.Grep, Tools.Recompile],
+        tools: [
+          Tools.Read,
+          Tools.Write,
+          Tools.Edit,
+          Tools.Glob,
+          Tools.Grep,
+          Tools.Bash,
+          Tools.Recompile
+        ],
         env: %{cwd: cwd, watch_dirs: [Path.join(cwd, "lib")]}
       ]
     }
@@ -78,7 +86,8 @@ tools = await.(:tools)
   Session.append(session, :"system/message", %{
     "content" => """
     You are a one-shot coding agent. The working directory is #{cwd}.
-    Use the read/write/edit/glob/grep tools to inspect and modify files.
+    Use the read/write/edit/glob/grep tools to inspect and modify files, and
+    bash to run the tests, git or a build.
     After editing source files under lib/, call recompile to hot-swap them.
     When the task is done, answer briefly without calling tools.
     """

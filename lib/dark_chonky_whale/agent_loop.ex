@@ -31,7 +31,13 @@ defmodule DarkChonkyWhale.AgentLoop do
     try do
       steps(client, session, tools, max_steps, 0)
     after
-      Session.append(session, :"turn/end", %{})
+      # Best-effort bookkeeping: if the session died mid-turn, the original
+      # error must not be masked by a failure to close the turn.
+      try do
+        Session.append(session, :"turn/end", %{})
+      catch
+        :exit, _ -> :ok
+      end
     end
   end
 

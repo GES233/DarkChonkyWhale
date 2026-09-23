@@ -10,7 +10,8 @@ defmodule DarkChonkyWhale.AgentLoopTest do
     @moduledoc false
 
     # opts[:script] is an Agent holding a list of canned responses; each
-    # call pops the next one.
+    # call pops the next one. opts[:kill_session] kills that session process
+    # mid-call, simulating a session that dies while a step is in flight.
     def stream_text(_model, _context, opts) do
       script = Keyword.fetch!(opts, :script)
 
@@ -19,6 +20,8 @@ defmodule DarkChonkyWhale.AgentLoopTest do
           [head | rest] -> {head, rest}
           [] -> {{:text, "(script exhausted)"}, []}
         end)
+
+      if pid = opts[:kill_session], do: GenServer.stop(pid)
 
       {:ok, to_stream_response(response)}
     end
@@ -234,6 +237,27 @@ defmodule DarkChonkyWhale.AgentLoopTest do
     types = session |> Session.events() |> Enum.map(& &1.type)
     assert List.last(types) == :"turn/end"
     assert Enum.count(types, &(&1 == :"step/start")) == 3
+  end
+
+  test "a session dying mid-turn fails the step, not the runner", %{
+    ctx: ctx,
+    script: script,
+    dir: dir
+  } do
+    tools = await(ctx, :tools)
+    session = open_session(%{dir: dir, scope: ctx.scope}, :s5)
+    script(script, [{:text, "never appended"}])
+
+    client = %Client{
+      scope: ctx.scope,
+      model: "scripted",
+      backend: ScriptedBackend,
+      opts: [script: script, kill_session: session]
+    }
+
+    # The step's own Session.append fails with :noproc; the turn-closing
+    # append in the `after` clause must not mask that with a second crash.
+    assert catch_exit(AgentLoop.run(client, session, tools))
   end
 
   defp client_from(ctx, script) do
