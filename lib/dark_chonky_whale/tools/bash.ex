@@ -11,9 +11,10 @@ defmodule DarkChonkyWhale.Tools.Bash do
 
   For everything the file tools cannot do — running the tests, `git`, a
   build, a formatter. The command runs through the platform shell — `bash
-  -c`, or `sh -c` where bash is absent, on POSIX; `cmd.exe /c` on Windows —
-  with stdout and stderr merged, in the composition's cwd unless the call
-  passes its own `cwd`.
+  -c`, or `sh -c` where bash is absent, on POSIX; on Windows a `bash`/`sh`
+  found on PATH, with `cmd.exe /c` as the last resort — with stdout and
+  stderr merged, in the composition's cwd unless the call passes its own
+  `cwd`.
 
   A settled command is a *result*, not an error: its output comes back, with
   `exit status N` appended when the command failed, so a failing test run
@@ -49,6 +50,28 @@ defmodule DarkChonkyWhale.Tools.Bash do
 
   The `timeout_ms` and `max_output_bytes` arguments override the environment
   per call.
+
+  ## Windows shell selection, and its limits
+
+  The cwd picks the universe: a command should run where its working
+  directory lives. On Windows the default is therefore the first
+  `bash`/`sh` on PATH that does *not* live under `%SystemRoot%` — a
+  `bash.exe` there is the WSL launcher, which would run the command inside
+  a Linux install (different filesystem view, none of the project's tools
+  on its PATH) and let none of its output back. Two gaps remain, by
+  decision:
+
+    * Discovery is PATH-only. A Git Bash that is installed but not on PATH
+      (a stock Git for Windows lives in `C:\\Program Files\\Git\\bin`) is
+      not found; point the `:shell` environment at it explicitly.
+    * A working directory inside WSL (`\\\\wsl$\\…`) does not route into
+      WSL — the tool refuses WSL rather than matching the cwd's universe.
+
+  The last resort is `cmd.exe`, which as a port child shows builtins'
+  output but loses what the programs it spawns write — `mix` runs, but its
+  output never arrives; redirect to a file and read it if you must. On
+  POSIX without `pgrep`, a timeout kills only the shell's own process, not
+  the whole tree.
   """
 
   @behaviour DarkChonkyWhale.Tool
@@ -173,7 +196,7 @@ defmodule DarkChonkyWhale.Tools.Bash do
         # child, cmd.exe loses the output of the external programs it spawns
         # (builtins work, grandchildren's stdio does not), which makes it
         # unusable beyond builtins. cmd.exe is the last resort.
-        case System.find_executable("bash") || System.find_executable("sh") do
+        case find_posix_shell() do
           nil -> {System.get_env("COMSPEC") || "cmd.exe", ["/c"]}
           path -> {path, ["-c"]}
         end
@@ -181,6 +204,29 @@ defmodule DarkChonkyWhale.Tools.Bash do
       _posix ->
         {System.find_executable("bash") || "sh", ["-c"]}
     end
+  end
+
+  # `bash.exe` under %SystemRoot% is not a shell for this universe at all —
+  # it is the WSL launcher: the command would run inside a Linux install
+  # (different filesystem view, none of the project's tools on its PATH)
+  # and its output never reaches the port, so every call would come back
+  # empty. A real bash or sh (Git Bash, MSYS2, a scoop shim) is the only
+  # acceptable answer; anything else on Windows is WSL or nothing.
+  defp find_posix_shell do
+    Enum.find_value(~w(bash sh), fn name ->
+      case System.find_executable(name) do
+        nil -> nil
+        path -> if under_system_root?(path), do: nil, else: path
+      end
+    end)
+  end
+
+  defp under_system_root?(path) do
+    # find_executable reports forward slashes on Windows, SystemRoot
+    # backslashes; normalize before comparing.
+    root = (System.get_env("SystemRoot") || "C:\\Windows") <> "\\"
+    normalized = String.replace(path, "/", "\\")
+    String.starts_with?(String.downcase(normalized), String.downcase(root))
   end
 
   # A POSIX shell takes the command as an argument, verbatim: an argument

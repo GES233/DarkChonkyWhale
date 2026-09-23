@@ -5,11 +5,25 @@ defmodule DarkChonkyWhale.Tools.BashTest do
 
   # Shell-language-dependent cases (POSIX syntax, `sleep`, `printf`) are
   # guarded on a POSIX shell being available — the same idiom the search
-  # tests use for symlinks, which Windows also cannot promise. `posix?/1` is a
-  # plain function, so it cannot stand in a `with` guard; the guard is a
-  # plain conditional instead.
+  # tests use for symlinks, which Windows also cannot promise. The lookup
+  # mirrors the tool's own default_shell/0: a `bash.exe` under %SystemRoot%
+  # is the WSL launcher, not a shell for this universe — it runs the command
+  # where none of the assertions apply and lets none of its output back.
   defp posix_shell do
-    System.find_executable("bash") || System.find_executable("sh")
+    Enum.find_value(~w(bash sh), fn name ->
+      case System.find_executable(name) do
+        nil -> nil
+        path -> if under_system_root?(path), do: nil, else: path
+      end
+    end)
+  end
+
+  defp under_system_root?(path) do
+    # find_executable reports forward slashes on Windows, SystemRoot
+    # backslashes; normalize before comparing.
+    root = (System.get_env("SystemRoot") || "C:\\Windows") <> "\\"
+    normalized = String.replace(path, "/", "\\")
+    String.starts_with?(String.downcase(normalized), String.downcase(root))
   end
 
   setup do
