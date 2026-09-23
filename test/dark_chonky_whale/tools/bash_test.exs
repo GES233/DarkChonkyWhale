@@ -3,6 +3,10 @@ defmodule DarkChonkyWhale.Tools.BashTest do
 
   alias DarkChonkyWhale.Tools.Bash
 
+  # Known byte sequences for the decoding tests: "中文" in CP936 (GBK) and
+  # "日本語" in CP932 (Shift-JIS), verified against iconv.
+  @gbk_bytes <<0xD6, 0xD0, 0xCE, 0xC4>>
+  @sjis_bytes <<0x93, 0xFA, 0x96, 0x7B, 0x8C, 0xEA>>
   # Shell-language-dependent cases (POSIX syntax, `sleep`, `printf`) are
   # guarded on a POSIX shell being available — the same idiom the search
   # tests use for symlinks, which Windows also cannot promise. The lookup
@@ -31,6 +35,57 @@ defmodule DarkChonkyWhale.Tools.BashTest do
     File.mkdir_p!(Path.join(dir, "sub"))
     on_exit(fn -> File.rm_rf(dir) end)
     {:ok, env: %{cwd: dir}, dir: dir}
+  end
+
+  # The test's own reading of the OEM codepage — deliberately not the
+  # tool's, so a wrong answer on either side shows up as a failure instead
+  # of the two agreeing.
+  defp oem_codepage do
+    with {:win32, _} <- :os.type(),
+         exe when is_binary(exe) <- System.find_executable("chcp.com"),
+         {output, 0} <- System.cmd(exe, [], stderr_to_stdout: true),
+         [digits] <- Regex.run(~r/\d+/, output),
+         {number, ""} <- Integer.parse(digits) do
+      number
+    else
+      _other -> nil
+    end
+  end
+
+  describe "output decoding" do
+    test "valid UTF-8 passes through even under a legacy codepage" do
+      assert Bash.decode_as("héllo 中文", "VENDORS/MICSFT/WINDOWS/CP936") == "héllo 中文"
+    end
+
+    test "GBK bytes transcode to UTF-8" do
+      assert Bash.decode_as(@gbk_bytes, "VENDORS/MICSFT/WINDOWS/CP936") == "中文"
+    end
+
+    test "Shift-JIS bytes transcode to UTF-8" do
+      assert Bash.decode_as(@sjis_bytes, "VENDORS/MICSFT/WINDOWS/CP932") == "日本語"
+    end
+
+    test "bytes no interpretation accepts become U+FFFD" do
+      # 0xFF is neither a valid lead nor a valid trail byte in CP936.
+      assert Bash.decode_as(<<"a", 0xFF, "b">>, "VENDORS/MICSFT/WINDOWS/CP936") == "a\uFFFDb"
+      assert Bash.decode_as(<<"a", 0xFF, "b">>, nil) == "a\uFFFDb"
+    end
+
+    test "shell output in the OEM codepage comes back as UTF-8", %{env: env} do
+      if sh = posix_shell() do
+        env = Map.put(env, :shell, {sh, ["-c"]})
+        # printf's octal escapes emit the raw GBK bytes of "中文".
+        assert {:ok, output} = Bash.execute(%{"command" => ~S(printf '\326\320\316\304')}, env)
+        assert String.valid?(output)
+
+        case oem_codepage() do
+          # The tool should have transcoded what printf emitted.
+          936 -> assert output == "中文"
+          # POSIX (or an unreadable codepage): each stray byte is scrubbed.
+          _other -> assert output == String.duplicate("\uFFFD", 4)
+        end
+      end
+    end
   end
 
   describe "bash" do
@@ -122,13 +177,20 @@ defmodule DarkChonkyWhale.Tools.BashTest do
       end
     end
 
-    test "scrubs bytes that are not valid UTF-8", %{env: env} do
+    test "invalid UTF-8 never escapes; its reading depends on the codepage", %{env: env} do
       if sh = posix_shell() do
         env = Map.put(env, :shell, {sh, ["-c"]})
 
         assert {:ok, output} = Bash.execute(%{"command" => "printf 'a\\377b'"}, env)
-        assert output == "a\uFFFDb"
         assert String.valid?(output)
+
+        case oem_codepage() do
+          # 0xFF is unmappable in CP936, and there is no codepage on POSIX.
+          page when page in [936, nil] -> assert output == "a\uFFFDb"
+          # …but it is ÿ in the Western ANSI page.
+          1252 -> assert output == "aÿb"
+          _other -> assert output =~ ~r/\Aa.\z/s
+        end
       end
     end
   end

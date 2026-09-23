@@ -31,7 +31,10 @@ defmodule DarkChonkyWhale.MixProject do
       {:req_llm, "~> 1.6"},
 
       # Serialization
-      {:jason, "~> 1.4"}
+      {:jason, "~> 1.4"},
+
+      # Legacy codepage transcoding (GBK, Shift-JIS, …) for shell output
+      {:codepagex, "~> 0.1"}
     ]
   end
 end

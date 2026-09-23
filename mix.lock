@@ -1,5 +1,6 @@
 %{
   "abnf_parsec": {:hex, :abnf_parsec, "2.1.0", "c4e88d5d089f1698297c0daced12be1fb404e6e577ecf261313ebba5477941f9", [:mix], [{:nimble_parsec, "~> 1.4", [hex: :nimble_parsec, repo: "hexpm", optional: false]}], "hexpm", "e0ed6290c7cc7e5020c006d1003520390c9bdd20f7c3f776bd49bfe3c5cd362a"},
+  "codepagex": {:hex, :codepagex, "0.1.13", "cc18e6a4b3a2174f3f496598ff3921769214c34a6baf604aa318a2bc0955b0d9", [:mix], [], "hexpm", "c328170767e3ec04682193e7a07a8074c934a995a903d1836777c0ca5edf0d46"},
   "dexterous": {:git, "https://github.com/GES233/Dexterous.git", "6fee3fa2048e5174864c3f55cb6af3514022e842", [sparse: "apps/dexterous"]},
   "dexterous_hmr": {:git, "https://github.com/GES233/Dexterous.git", "6fee3fa2048e5174864c3f55cb6af3514022e842", [sparse: "apps/dexterous_hmr"]},
   "dexterous_loader": {:git, "https://github.com/GES233/Dexterous.git", "6fee3fa2048e5174864c3f55cb6af3514022e842", [sparse: "apps/dexterous_loader"]},

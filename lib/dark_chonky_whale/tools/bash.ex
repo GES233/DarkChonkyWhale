@@ -36,8 +36,11 @@ defmodule DarkChonkyWhale.Tools.Bash do
   Output is capped at `:max_output_bytes` (default
   #{@default_max_output_bytes}): the head and the tail are kept and the
   middle is replaced by a byte count, so one runaway command cannot flood the
-  session log. Bytes that are not valid UTF-8 are scrubbed to U+FFFD on the
-  way out — tool output is persisted as JSON, which would refuse them.
+  session log. Output is expected to be UTF-8; on Windows, bytes that are
+  not are transcoded from the OEM codepage (`chcp`'s answer — CP936 on a
+  zh-CN machine), and only bytes no interpretation accepts become U+FFFD —
+  tool output is persisted as JSON, which would refuse invalid bytes
+  outright.
 
   Environment:
 
@@ -72,6 +75,14 @@ defmodule DarkChonkyWhale.Tools.Bash do
   output never arrives; redirect to a file and read it if you must. On
   POSIX without `pgrep`, a timeout kills only the shell's own process, not
   the whole tree.
+
+  ## The executor is a seam
+
+  Deciding *what* to spawn (`build_plan/3`) is deliberately separate from
+  *how* it runs (`exec/5`, a local port). A composition that needs commands
+  to run elsewhere — WSL, over SSH, inside a sandbox — should be able to
+  replace the latter without touching the tool surface. Today only the
+  local executor exists; the split is the opening.
   """
 
   @behaviour DarkChonkyWhale.Tool
@@ -304,6 +315,9 @@ defmodule DarkChonkyWhale.Tools.Bash do
 
   ## The run
 
+  # The executor side of the seam (see the moduledoc): given a plan, run it
+  # and collect the output. To run commands elsewhere, replace this — not
+  # the plan.
   defp exec(plan, cwd, env, timeout_ms, max_bytes) do
     case open(plan, cwd, env) do
       {:ok, port} -> collect(port, fresh(), deadline(timeout_ms), timeout_ms, max_bytes)
@@ -539,7 +553,7 @@ defmodule DarkChonkyWhale.Tools.Bash do
 
     (acc.head <> elision <> acc.tail)
     |> normalize_eol()
-    |> scrub()
+    |> decode()
     |> String.trim_trailing("\n")
   end
 
@@ -550,11 +564,81 @@ defmodule DarkChonkyWhale.Tools.Bash do
 
   defp normalize_eol(text), do: String.replace(text, "\r\n", "\n")
 
-  # Tool output is logged as JSON, so it must be valid UTF-8: a stray byte
-  # from a binary file becomes U+FFFD instead of an encoding failure. Both
-  # error kinds consume one offending byte and carry on — `:incomplete` is not
-  # treated as "the end", because the byte stream can be spliced mid-character
-  # where the head meets the tail, and stopping there would drop the tail.
+  # Tool output is persisted as JSON, so it must be valid UTF-8 — but a
+  # console program does not necessarily write UTF-8: on Windows it writes
+  # in the OEM codepage (`chcp`'s answer; CP936 on a zh-CN machine, CP437
+  # on a Western one). Valid UTF-8 passes through untouched; anything else
+  # is transcoded from the system codepage when one is known, and only
+  # bytes that no interpretation accepts become U+FFFD.
+  defp decode(binary), do: decode_as(binary, fallback_encoding())
+
+  @doc false
+  # The decoding decision with the codepage given explicitly — kept public
+  # so the test suite can exercise pages this machine does not use.
+  def decode_as(binary, encoding) do
+    if String.valid?(binary), do: binary, else: transcode(binary, encoding)
+  end
+
+  defp transcode(binary, nil), do: scrub(binary)
+
+  defp transcode(binary, encoding) do
+    # use_utf_replacement replaces a byte no mapping accepts with U+FFFD
+    # and carries on, so this never fails.
+    Codepagex.to_string!(binary, encoding, Codepagex.use_utf_replacement())
+  end
+
+  # The fallback is the OEM codepage, asked of `chcp` once and cached. POSIX
+  # locales other than UTF-8 are legacy enough that scrubbing is the honest
+  # answer there.
+  defp fallback_encoding do
+    case :os.type() do
+      {:win32, _} -> cached(:codepage, &detect_codepage/0)
+      _posix -> nil
+    end
+  end
+
+  defp cached(key, fun) do
+    case :persistent_term.get({__MODULE__, key}, :unknown) do
+      :unknown ->
+        value = fun.()
+        :persistent_term.put({__MODULE__, key}, value)
+        value
+
+      value ->
+        value
+    end
+  end
+
+  # `chcp` prints the active code page, localized ("Active code page: 936" /
+  # "活动代码页: 936") — the digits are the reliable part. A page with no
+  # compiled table (65001/UTF-8 among them) means no transcoding.
+  defp detect_codepage do
+    with exe when is_binary(exe) <-
+           System.find_executable("chcp.com") || System.find_executable("chcp"),
+         {output, 0} <- System.cmd(exe, [], stderr_to_stdout: true),
+         [digits] <- Regex.run(~r/\d+/, output),
+         {number, ""} <- Integer.parse(digits) do
+      codepage_name(number)
+    else
+      _other -> nil
+    end
+  rescue
+    _exception -> nil
+  end
+
+  defp codepage_name(number) do
+    Enum.find(
+      ["VENDORS/MICSFT/WINDOWS/CP#{number}", "VENDORS/MICSFT/PC/CP#{number}"],
+      &(&1 in compiled_codepages())
+    )
+  end
+
+  defp compiled_codepages, do: cached(:codepages, &Codepagex.encoding_list/0)
+
+  # The last resort for bytes no interpretation accepts. Both error kinds
+  # consume one offending byte and carry on — `:incomplete` is not treated
+  # as "the end", because the byte stream can be spliced mid-character where
+  # the head meets the tail, and stopping there would drop the tail.
   defp scrub(binary), do: binary |> scrub([]) |> IO.iodata_to_binary()
 
   defp scrub(<<>>, acc), do: Enum.reverse(acc)
