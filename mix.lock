@@ -1,0 +1,4 @@
+%{
+  "dexterous": {:git, "https://github.com/GES233/Dexterous.git", "59403eb8bd6ec072fe90c2797aacef2e0a8350a5", [sparse: "apps/dexterous"]},
+  "dexterous_loader": {:git, "https://github.com/GES233/Dexterous.git", "59403eb8bd6ec072fe90c2797aacef2e0a8350a5", [sparse: "apps/dexterous_loader"]},
+}
