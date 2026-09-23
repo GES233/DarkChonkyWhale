@@ -22,8 +22,12 @@ defmodule DarkChonkyWhale.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
+      # Framework
       {:dexterous, github: "GES233/Dexterous", sparse: "apps/dexterous", override: true},
-      {:dexterous_loader, github: "GES233/Dexterous", sparse: "apps/dexterous_loader"}
+      {:dexterous_loader, github: "GES233/Dexterous", sparse: "apps/dexterous_loader"},
+
+      # LLM Support
+      {:req_llm, "~> 1.6"}
     ]
   end
 end

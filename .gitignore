@@ -22,3 +22,6 @@ erl_crash.dump
 # Ignore package tarball (built via "mix hex.build").
 dark_chonky_whale-*.tar
 
+# Local API keys — ReqLLM auto-loads .env from the project root.
+/.env
+
