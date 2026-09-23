@@ -8,6 +8,7 @@
 
 alias DarkChonkyWhale.{AgentLoop, LLM, Session, Sessions, Tools}
 alias Dexterous.Context
+alias DexterousLoader.Entry
 
 prompt = List.first(System.argv()) || raise "usage: mix run examples/agent.exs PROMPT [model]"
 model = Enum.at(System.argv(), 1) || "deepseek:deepseek-flash"
@@ -35,13 +36,28 @@ ctx = Dexterous.root()
     IO.puts("\n[tool #{name}] #{status} (#{ms}ms)")
   end)
 
-{:ok, _} = Context.use(ctx, LLM, model: model)
-{:ok, _} = Context.use(ctx, Sessions, dir: Path.join(System.tmp_dir!(), "dcw-headless-sessions"))
-{:ok, _} =
-  Context.use(ctx, Tools,
-    tools: [Tools.Read, Tools.Write, Tools.Edit, Tools.Glob, Tools.Grep],
-    env: %{cwd: cwd}
-  )
+{:ok, loader} =
+  DexterousLoader.start_link(ctx, [
+    %Entry{id: :llm, component: LLM, config: [model: model]},
+    %Entry{
+      id: :sessions,
+      component: Sessions,
+      config: [dir: Path.join(System.tmp_dir!(), "dcw-headless-sessions")]
+    },
+    %Entry{
+      id: :tools,
+      component: Tools,
+      config: [
+        tools: [Tools.Read, Tools.Write, Tools.Edit, Tools.Glob, Tools.Grep, Tools.Recompile],
+        env: %{cwd: cwd, watch_dirs: [Path.join(cwd, "lib")]}
+      ]
+    }
+  ])
+
+# The HMR loop, with this composition's loader registered: the recompile
+# tool's cycles then respawn stale entries transactionally.
+{:ok, _} = DexterousHMR.start_link()
+:ok = DexterousHMR.register(loader)
 
 await = fn key ->
   Enum.reduce_while(1..100, nil, fn _, _ ->
@@ -62,7 +78,8 @@ tools = await.(:tools)
   Session.append(session, :"system/message", %{
     "content" => """
     You are a one-shot coding agent. The working directory is #{cwd}.
-    Use the read/write/edit tools to inspect and modify files.
+    Use the read/write/edit/glob/grep tools to inspect and modify files.
+    After editing source files under lib/, call recompile to hot-swap them.
     When the task is done, answer briefly without calling tools.
     """
   })

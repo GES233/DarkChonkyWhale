@@ -18,6 +18,7 @@ a composition wants in the `:tools` component's config.
 | `edit` | `DarkChonkyWhale.Tools.Edit` | Replace a unique string, line-ending aware |
 | `glob` | `DarkChonkyWhale.Tools.Glob` | Find files by pattern (`*`, `?`, `**`) |
 | `grep` | `DarkChonkyWhale.Tools.Grep` | Search file contents by regex |
+| `recompile` | `DarkChonkyWhale.Tools.Recompile` | Recompile and hot-swap changed modules (dev only, via `dexterous_hmr`) |
 
 `glob` and `grep` share `DarkChonkyWhale.Tools.Walk`: a deterministic,
 symlink-safe walk that prunes build output and vendored directories

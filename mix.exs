@@ -25,9 +25,12 @@ defmodule DarkChonkyWhale.MixProject do
       # Framework
       {:dexterous, github: "GES233/Dexterous", sparse: "apps/dexterous", override: true},
       {:dexterous_loader, github: "GES233/Dexterous", sparse: "apps/dexterous_loader"},
+      {:dexterous_hmr, github: "GES233/Dexterous", sparse: "apps/dexterous_hmr"},
 
       # LLM Support
       {:req_llm, "~> 1.6"},
+
+      # Serialization
       {:jason, "~> 1.4"}
     ]
   end
