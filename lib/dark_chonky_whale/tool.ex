@@ -43,4 +43,17 @@ defmodule DarkChonkyWhale.Tool do
 
   @callback schema() :: schema()
   @callback execute(args :: map(), env()) :: {:ok, term()} | {:error, term()}
+
+  @doc """
+  Resolve a model-supplied path against the environment's `:cwd` (falling
+  back to the process cwd). Absolute paths pass through unchanged.
+  """
+  @spec resolve_path(env(), String.t()) :: String.t()
+  def resolve_path(env, path) when is_binary(path) do
+    if Path.type(path) == :absolute do
+      path
+    else
+      Path.join(env[:cwd] || File.cwd!(), path)
+    end
+  end
 end
