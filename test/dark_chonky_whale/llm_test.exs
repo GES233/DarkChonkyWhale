@@ -71,6 +71,7 @@ defmodule DarkChonkyWhale.LLMTest do
 
     assert [%{type: :content, text: "hel"}, %{type: :content, text: "lo"}] =
              Enum.to_list(response.stream)
+
     assert_received {:chunk, "hel"}
     assert_received {:chunk, "lo"}
   end

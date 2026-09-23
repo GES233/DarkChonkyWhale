@@ -27,7 +27,8 @@ defmodule DarkChonkyWhale.MixProject do
       {:dexterous_loader, github: "GES233/Dexterous", sparse: "apps/dexterous_loader"},
 
       # LLM Support
-      {:req_llm, "~> 1.6"}
+      {:req_llm, "~> 1.6"},
+      {:jason, "~> 1.4"}
     ]
   end
 end

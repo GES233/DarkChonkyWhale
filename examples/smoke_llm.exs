@@ -10,7 +10,7 @@ alias DarkChonkyWhale.LLM
 alias DarkChonkyWhale.LLM.Client
 alias Dexterous.Context
 
-model = List.first(System.argv()) || "zenmux:sapiens-ai/agnes-1.5-lite"
+model = List.first(System.argv()) || "zenmux:openai/gpt-6-astra"
 
 ctx = Dexterous.root()
 
