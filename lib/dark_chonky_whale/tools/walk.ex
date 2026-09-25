@@ -34,7 +34,9 @@ defmodule DarkChonkyWhale.Tools.Walk do
 
   @doc "The directory names pruned for a call, from `env[:search_ignore_dirs]`."
   @spec ignore_dirs(DarkChonkyWhale.Tool.env()) :: [String.t()]
-  def ignore_dirs(env), do: Map.get(env, :search_ignore_dirs, @default_ignore)
+  # Access, not Map.get: a direct caller (the in-process Elixir runtime) may
+  # hand over a keyword list, and both shapes read the same through it.
+  def ignore_dirs(env), do: env[:search_ignore_dirs] || @default_ignore
 
   @doc """
   Every regular file under `base`, pruned, in path order so that repeated

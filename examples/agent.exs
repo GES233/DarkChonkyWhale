@@ -54,7 +54,7 @@ ctx = Dexterous.root()
           Tools.Edit,
           Tools.Glob,
           Tools.Grep,
-          Tools.Bash,
+          Tools.Executor,
           Tools.Recompile
         ],
         env: %{cwd: cwd, watch_dirs: [Path.join(cwd, "lib")]}
@@ -87,7 +87,7 @@ tools = await.(:tools)
     "content" => """
     You are a one-shot coding agent. The working directory is #{cwd}.
     Use the read/write/edit/glob/grep tools to inspect and modify files, and
-    bash to run the tests, git or a build.
+    execute to run the tests, git or a build.
     After editing source files under lib/, call recompile to hot-swap them.
     When the task is done, answer briefly without calling tools.
     """

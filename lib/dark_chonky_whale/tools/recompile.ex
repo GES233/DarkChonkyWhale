@@ -63,8 +63,9 @@ defmodule DarkChonkyWhale.Tools.Recompile do
     end
   end
 
+  # Access, not Map.get: a direct caller may hand over a keyword list.
   defp watch_dirs(env) do
-    Map.get(env, :watch_dirs) || [Path.join(env[:cwd] || File.cwd!(), "lib")]
+    env[:watch_dirs] || [Path.join(env[:cwd] || File.cwd!(), "lib")]
   end
 
   defp render(report) do
