@@ -27,9 +27,8 @@ defmodule DarkChonkyWhale.Executor.Runtimes.PowerShell do
   @impl true
   def run(code, ctx) do
     with {:ok, {program, base_args}} <- powershell(ctx.env),
-         {:ok, exe} <- executable(program),
-         {:ok, plan} <- script_invocation(exe, base_args, code) do
-      Runner.run(plan, ctx)
+         {:ok, exe} <- executable(program) do
+      Runner.run(script_plan(exe, base_args, code), ctx)
     end
   end
 
@@ -49,21 +48,14 @@ defmodule DarkChonkyWhale.Executor.Runtimes.PowerShell do
     end
   end
 
-  defp script_invocation(exe, base_args, code) do
-    dir = Path.join(System.tmp_dir!(), "dcw-ps-#{System.unique_integer([:positive])}")
-    script = Path.join(dir, "script.ps1")
+  # The script goes to the runner as content, with the `:script` atom where
+  # its path belongs in the argument vector. The BOM comes first: without it
+  # Windows PowerShell 5.1 decodes the file in the system ANSI codepage and
+  # any non-ASCII code arrives mangled.
+  defp script_plan(exe, base_args, code) do
+    body = "\uFEFF[Console]::OutputEncoding = [Text.Encoding]::UTF8\r\n" <> crlf(code) <> "\r\n"
 
-    # The BOM comes first: without it Windows PowerShell 5.1 decodes the file
-    # in the system ANSI codepage and any non-ASCII code arrives mangled.
-    body =
-      "\uFEFF[Console]::OutputEncoding = [Text.Encoding]::UTF8\r\n" <> crlf(code) <> "\r\n"
-
-    with :ok <- File.mkdir_p(dir),
-         :ok <- File.write(script, body) do
-      {:ok, %{exe: exe, args: base_args ++ ["-File", script], cwd: nil, script: script}}
-    else
-      {:error, reason} -> {:error, "cannot write #{script}: #{:file.format_error(reason)}"}
-    end
+    %{exe: exe, args: base_args ++ ["-File", :script], cwd: nil, script: %{name: "script.ps1", content: body}}
   end
 
   defp crlf(text), do: text |> String.replace("\r\n", "\n") |> String.replace("\n", "\r\n")

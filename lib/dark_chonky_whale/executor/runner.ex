@@ -10,7 +10,9 @@ defmodule DarkChonkyWhale.Executor.Runner do
   spawn is each runtime's business (see `DarkChonkyWhale.Executor.Runtimes`);
   how it runs lives here, once. A composition that needs code to run
   elsewhere — WSL, over SSH, inside a sandbox — should be able to replace
-  this module without touching the runtimes or the tool surface.
+  this module without touching the runtimes or the tool surface; a plan is
+  plain data, script content included, so nothing about a run is tied to
+  this machine.
 
   stdout and stderr are merged. A settled process is a *result*, not an
   error: its output comes back, with `exit status N` appended when the
@@ -30,14 +32,21 @@ defmodule DarkChonkyWhale.Executor.Runner do
 
   @typedoc """
   What to spawn: the executable, the argument vector, an optional cwd
-  override (the cmd batch-file case), and a temporary script whose directory
-  is deleted after the run.
+  override, and an optional script.
+
+  The script is *content*, not a path — `run/2` writes it into a fresh
+  temporary directory, substitutes the `:script` atom in `args` with the
+  file's full path, and deletes the directory after the run. A runtime
+  never touches the filesystem, and a plan holds everything a remote
+  runner would need to receive. `cwd: :script` runs with the script's
+  directory as the process cwd (the cmd batch-file case, where the script
+  must be named by a bare basename and `cd`s away itself).
   """
   @type plan :: %{
           exe: String.t(),
-          args: [String.t()],
-          cwd: String.t() | nil,
-          script: String.t() | nil
+          args: [String.t() | :script],
+          cwd: String.t() | :script | nil,
+          script: %{name: String.t(), content: binary()} | nil
         }
 
   @doc """
@@ -55,10 +64,32 @@ defmodule DarkChonkyWhale.Executor.Runner do
           max_output_bytes: pos_integer()
         }) :: {:ok, String.t()} | {:error, String.t()}
   def run(plan, ctx) do
-    try do
-      exec(plan, ctx.cwd, ctx.env, ctx.timeout_ms, ctx.max_output_bytes)
-    after
-      if plan.script, do: File.rm_rf(Path.dirname(plan.script))
+    with {:ok, plan, script_dir} <- materialize(plan) do
+      try do
+        exec(plan, ctx.cwd, ctx.env, ctx.timeout_ms, ctx.max_output_bytes)
+      after
+        if script_dir, do: File.rm_rf(script_dir)
+      end
+    end
+  end
+
+  # Content to disk: the script lands in its own temporary directory, the
+  # `:script` atom in the argument vector becomes the file's full path, and
+  # a `cwd: :script` resolves to that directory. The directory is handed
+  # back so `run/2` can delete it once the run settles.
+  defp materialize(%{script: nil} = plan), do: {:ok, plan, nil}
+
+  defp materialize(%{script: %{name: name, content: content}} = plan) do
+    dir = Path.join(System.tmp_dir!(), "dcw-run-#{System.unique_integer([:positive])}")
+    path = Path.join(dir, name)
+
+    with :ok <- File.mkdir_p(dir),
+         :ok <- File.write(path, content) do
+      args = Enum.map(plan.args, fn :script -> path; arg -> arg end)
+      cwd = if plan.cwd == :script, do: dir, else: plan.cwd
+      {:ok, %{plan | args: args, cwd: cwd}, dir}
+    else
+      {:error, reason} -> {:error, "cannot write #{path}: #{:file.format_error(reason)}"}
     end
   end
 

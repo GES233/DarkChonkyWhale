@@ -53,7 +53,8 @@ defmodule DarkChonkyWhale.Executor.Runtimes.Shell do
   ## How the command reaches the shell
 
   # A plan is what to spawn: the executable, the argument vector, an optional
-  # cwd override (the batch-file case), and a temporary script to delete.
+  # cwd override (the batch-file case), and an optional script as content —
+  # the runner writes and deletes it.
   defp build_plan(env, command, cwd) do
     {program, base_args} = shell(env)
 
@@ -139,32 +140,25 @@ defmodule DarkChonkyWhale.Executor.Runtimes.Shell do
   # The batch file is spawned with its own directory as the process cwd and
   # named by a bare basename — no quotes in the argument vector at all,
   # whatever spaces the temp directory contains — and the script `cd`s to the
-  # real working directory as its first act.
+  # real working directory as its first act. The content is handed to the
+  # runner, which materializes it; `cwd: :script` points the process at the
+  # directory the script lands in.
   defp batch_invocation(exe, base_args, command, cwd) do
-    dir = Path.join(System.tmp_dir!(), "dcw-bash-#{System.unique_integer([:positive])}")
-    name = "command.cmd"
-
-    case write_batch(Path.join(dir, name), command, cwd) do
-      :ok -> {:ok, %{exe: exe, args: base_args ++ [name], cwd: dir, script: Path.join(dir, name)}}
-      {:error, message} -> {:error, message}
-    end
+    {:ok,
+     %{
+       exe: exe,
+       args: base_args ++ ["command.cmd"],
+       cwd: :script,
+       script: %{name: "command.cmd", content: batch_body(command, cwd)}
+     }}
   end
 
-  defp write_batch(path, command, cwd) do
-    # `@echo off` first, or cmd prints every line of the file into the output;
-    # the code page is set to UTF-8 so a command line the model wrote in UTF-8
-    # is read as itself; then the real working directory is entered. The body
-    # is ordinary batch, so `%VAR%` expansion applies as it would in any `.cmd`.
-    body =
-      "@echo off\r\nchcp 65001 >nul\r\ncd /d \"" <>
-        cwd <> "\"\r\n" <> crlf(command) <> "\r\n"
-
-    with :ok <- File.mkdir_p(Path.dirname(path)),
-         :ok <- File.write(path, body) do
-      :ok
-    else
-      {:error, reason} -> {:error, "cannot write #{path}: #{:file.format_error(reason)}"}
-    end
+  # `@echo off` first, or cmd prints every line of the file into the output;
+  # the code page is set to UTF-8 so a command line the model wrote in UTF-8
+  # is read as itself; then the real working directory is entered. The body
+  # is ordinary batch, so `%VAR%` expansion applies as it would in any `.cmd`.
+  defp batch_body(command, cwd) do
+    "@echo off\r\nchcp 65001 >nul\r\ncd /d \"" <> cwd <> "\"\r\n" <> crlf(command) <> "\r\n"
   end
 
   defp crlf(text), do: text |> String.replace("\r\n", "\n") |> String.replace("\n", "\r\n")

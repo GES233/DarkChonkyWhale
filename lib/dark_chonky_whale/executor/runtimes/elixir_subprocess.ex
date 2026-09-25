@@ -19,9 +19,8 @@ defmodule DarkChonkyWhale.Executor.Runtimes.ElixirSubprocess do
   @impl true
   def run(code, ctx) do
     with {:ok, {program, base_args}} <- elixir(ctx.env),
-         {:ok, exe} <- executable(program),
-         {:ok, plan} <- script_invocation(exe, base_args, code) do
-      Runner.run(plan, ctx)
+         {:ok, exe} <- executable(program) do
+      Runner.run(script_plan(exe, base_args, code), ctx)
     end
   end
 
@@ -33,16 +32,10 @@ defmodule DarkChonkyWhale.Executor.Runtimes.ElixirSubprocess do
     end
   end
 
-  defp script_invocation(exe, base_args, code) do
-    dir = Path.join(System.tmp_dir!(), "dcw-exs-#{System.unique_integer([:positive])}")
-    script = Path.join(dir, "script.exs")
-
-    with :ok <- File.mkdir_p(dir),
-         :ok <- File.write(script, code) do
-      {:ok, %{exe: exe, args: base_args ++ [script], cwd: nil, script: script}}
-    else
-      {:error, reason} -> {:error, "cannot write #{script}: #{:file.format_error(reason)}"}
-    end
+  # The script goes to the runner as content, with the `:script` atom where
+  # its path belongs in the argument vector.
+  defp script_plan(exe, base_args, code) do
+    %{exe: exe, args: base_args ++ [:script], cwd: nil, script: %{name: "script.exs", content: code}}
   end
 
   defp executable(program) do
