@@ -1,5 +1,7 @@
 import Config
 
+config :req_llm, warn_unverified_models: false
+
 # Codepagex compiles its mapping tables; only the ones a shell's output can
 # plausibly arrive in are worth the beam size. These are the Windows OEM/ANSI
 # codepages (`chcp` numbers): PC/* is the OEM family, WINDOWS/* the ANSI one.
