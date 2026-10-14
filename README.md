@@ -6,6 +6,26 @@
 
 Elixir's DSH implementation.
 
+## Multi-turn harness
+
+Start the interactive coding harness in this repository:
+
+```sh
+mix run examples/multi_turn_agent.exs
+```
+
+Point it at another workspace with `--cwd`; the harness keeps running from
+this Mix project while all relative file tools and commands use the selected
+workspace:
+
+```sh
+mix run examples/multi_turn_agent.exs -- --cwd D:/CodeRepo/SelfAssistant/hoi
+mix run examples/multi_turn_agent.exs -- --cwd ../another-project openai:gpt-5
+```
+
+The model remains optional and defaults to `deepseek:deepseek-flash`. Run with
+`-- --help` for the complete command-line usage.
+
 ## Built-in tools
 
 Each tool is a plain module implementing `DarkChonkyWhale.Tool`; list the ones
@@ -47,4 +67,3 @@ run that outlives its timeout is an error, and it is killed. The tool env
 can fix a `:shell`, `:powershell`, `:python` or `:elixir` program, plus
 `:shell_timeout_ms`, `:shell_env` and `:max_output_bytes` defaults; each
 call can override the timeout and the cap.
-
