@@ -211,7 +211,7 @@ defmodule DarkChonkyWhale.Tools.ExecutorTest do
           page when page in [936, nil] -> assert output == "a\uFFFDb"
           # …but it is ÿ in the Western ANSI page.
           1252 -> assert output == "aÿb"
-          _other -> assert output =~ ~r/\Aa.\z/s
+          _other -> assert output =~ ~r/\Aa.b\z/su
         end
       end
     end
